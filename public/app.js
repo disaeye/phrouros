@@ -113,6 +113,23 @@ const I18N = {
     "ph.path": "项目绝对路径",
     "ph.label": "显示名称（可选）",
     "empty.noProject": "请先导入一个项目目录",
+    "empty.title": "导入项目开始监控",
+    "empty.lead": "从本机 OpenCode 数据库发现的项目中选择，或手动填写路径。",
+    "empty.discoverTitle": "在 OpenCode 中发现",
+    "empty.importSelected": "导入选中",
+    "empty.importAll": "全部导入",
+    "empty.importOne": "导入并打开",
+    "empty.manualTitle": "手动导入",
+    "empty.hint": "需先在该目录用 OpenCode 跑过会话；导入只登记路径，不修改 OpenCode 数据。",
+    "empty.metaDb": "数据库：{path}",
+    "empty.metaMissingDb": "未找到 OpenCode 数据库（{path}）。可先启动 OpenCode，或手动填写项目路径。",
+    "empty.noDiscover": "数据库里还没有项目记录。请先在项目目录运行 OpenCode，或使用下方手动导入。",
+    "empty.pathMissing": "路径不存在",
+    "source.pathMissing": "（路径不存在）",
+    "empty.sessions": "{n} 会话",
+    "empty.importing": "正在导入…",
+    "empty.importFailed": "导入失败：{err}",
+    "empty.needSelect": "请先勾选可导入的项目",
     "empty.noActive": "当前没有进行中的委派",
     "empty.noBg": "没有后台 Agent",
     "empty.noOmo": "未检测到 .omo/boulder.json",
@@ -153,6 +170,11 @@ const I18N = {
     "msg.removed": "已移除",
     "msg.needPath": "请填写项目路径",
     "msg.confirmRemove": "确定移除当前项目？（不删除本地数据）",
+    "note.pathMissing": "项目目录不存在：{path}。可从顶部切换其他项目，或移除该源后重新导入。",
+    "note.noMainSession": "该目录下未找到未归档的主 session。请确认曾在该目录启动过 OpenCode。",
+    "label.untitled": "无标题",
+    "label.unknownAgent": "未知 agent",
+    "label.unknownModel": "未知模型",
   },
   en: {
     "app.title": "Phrouros",
@@ -240,6 +262,23 @@ const I18N = {
     "ph.path": "Absolute project path",
     "ph.label": "Display name (optional)",
     "empty.noProject": "Import a project directory first",
+    "empty.title": "Import a project to start",
+    "empty.lead": "Pick projects discovered from your local OpenCode database, or paste a path.",
+    "empty.discoverTitle": "Found in OpenCode",
+    "empty.importSelected": "Import selected",
+    "empty.importAll": "Import all",
+    "empty.importOne": "Import & open",
+    "empty.manualTitle": "Manual import",
+    "empty.hint": "Run OpenCode in that directory first. Import only registers the path — OpenCode data is never modified.",
+    "empty.metaDb": "Database: {path}",
+    "empty.metaMissingDb": "OpenCode database not found ({path}). Start OpenCode first, or import a path manually.",
+    "empty.noDiscover": "No projects in the database yet. Run OpenCode in a project folder, or use manual import below.",
+    "empty.pathMissing": "Path missing",
+    "source.pathMissing": "(path missing)",
+    "empty.sessions": "{n} sessions",
+    "empty.importing": "Importing…",
+    "empty.importFailed": "Import failed: {err}",
+    "empty.needSelect": "Select at least one importable project",
     "empty.noActive": "No active delegates",
     "empty.noBg": "No background agents",
     "empty.noOmo": "No .omo/boulder.json detected",
@@ -280,6 +319,11 @@ const I18N = {
     "msg.removed": "Removed",
     "msg.needPath": "Path required",
     "msg.confirmRemove": "Remove current project? (local data kept)",
+    "note.pathMissing": "Project directory missing: {path}. Switch project in the top bar, or remove this source and re-import.",
+    "note.noMainSession": "No unarchived main session found under this directory. Confirm OpenCode was started there.",
+    "label.untitled": "untitled",
+    "label.unknownAgent": "unknown agent",
+    "label.unknownModel": "unknown model",
   },
 }
 
@@ -299,13 +343,32 @@ function storageRemove(key) {
   localStorage.removeItem(LS_PREFIX + key)
 }
 
+function detectBrowserLang() {
+  const primary =
+    typeof navigator !== "undefined"
+      ? navigator.language || navigator.userLanguage || (navigator.languages && navigator.languages[0]) || ""
+      : ""
+  const tag = String(primary)
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, "-")
+  if (tag === "zh" || tag.startsWith("zh-")) return "zh"
+  return "en"
+}
+
+function resolveInitialLang() {
+  const saved = storageGet("lang")
+  if (saved === "zh" || saved === "en") return saved
+  return detectBrowserLang()
+}
+
 const state = {
   wfFollow: true,
   wfWindowMs: 45 * 60 * 1000,
   lastDrawerRefresh: 0,
   drawerFinger: "",
   sourceId: storageGet("sourceId"),
-  lang: storageGet("lang") || "zh",
+  lang: resolveInitialLang(),
   theme: storageGet("theme") || "light",
   timer: null,
   tab: "steps",
@@ -495,6 +558,20 @@ function escapeHtml(s) {
 
 function setMsg(text, isErr = false) {
   const el = $("import-msg")
+  if (!el) return
+  if (!text) {
+    el.hidden = true
+    el.textContent = ""
+    return
+  }
+  el.hidden = false
+  el.textContent = text
+  el.classList.toggle("err", isErr)
+}
+
+function setEmptyMsg(id, text, isErr = false) {
+  const el = $(id)
+  if (!el) return
   if (!text) {
     el.hidden = true
     el.textContent = ""
@@ -517,6 +594,17 @@ function setNote(text) {
   el.textContent = text || ""
 }
 
+function showEmptyState(show) {
+  const panel = $("empty-state")
+  if (panel) panel.hidden = !show
+  const importPanel = document.querySelector(".import-panel")
+  if (importPanel) importPanel.hidden = show
+  if (show) {
+    $("bento").hidden = true
+    $("status-strip").hidden = true
+  }
+}
+
 async function api(path, opts) {
   const res = await fetch(path, {
     headers: {
@@ -528,6 +616,192 @@ async function api(path, opts) {
   const data = await res.json().catch(() => ({}))
   if (!res.ok || data.ok === false) throw new Error(data.error || data.note || `HTTP ${res.status}`)
   return data
+}
+
+function formatRelativeActive(ts) {
+  if (!ts) return "—"
+  const diff = Date.now() - ts
+  if (diff < 0) return "—"
+  const min = Math.floor(diff / 60000)
+  if (min < 1) return state.lang === "zh" ? "刚刚" : "just now"
+  if (min < 60) return state.lang === "zh" ? `${min} 分钟前` : `${min}m ago`
+  const hr = Math.floor(min / 60)
+  if (hr < 48) return state.lang === "zh" ? `${hr} 小时前` : `${hr}h ago`
+  const day = Math.floor(hr / 24)
+  return state.lang === "zh" ? `${day} 天前` : `${day}d ago`
+}
+
+function syncEmptyImportButtons() {
+  const list = $("empty-project-list")
+  const btnSel = $("btn-import-selected")
+  if (!list || !btnSel) return
+  const checked = list.querySelectorAll('input[type="checkbox"]:checked:not(:disabled)')
+  btnSel.disabled = checked.length === 0
+  const n = checked.length
+  if (n <= 1) btnSel.textContent = t("empty.importSelected")
+  else btnSel.textContent = `${t("empty.importSelected")} (${n})`
+}
+
+function renderEmptyProjects(projects) {
+  const list = $("empty-project-list")
+  if (!list) return
+  list.innerHTML = ""
+  const importable = (projects || []).filter((p) => p.pathExists && p.worktree)
+  for (const p of projects || []) {
+    const li = document.createElement("li")
+    li.className = "empty-project-row" + (p.pathExists ? "" : " is-missing")
+    const can = Boolean(p.pathExists && p.worktree)
+    const label = p.label || p.name || p.worktree || p.id
+    li.innerHTML = `
+      <input type="checkbox" ${can ? "checked" : "disabled"} data-worktree="${escapeHtml(p.worktree || "")}" data-label="${escapeHtml(label)}" aria-label="${escapeHtml(label)}" />
+      <div class="empty-project-main">
+        <div class="empty-project-name" title="${escapeHtml(label)}">${escapeHtml(label)}</div>
+        <div class="empty-project-path" title="${escapeHtml(p.worktree || "")}">${escapeHtml(p.worktree || "—")}</div>
+      </div>
+      <div class="empty-project-meta">
+        ${p.pathExists ? "" : `<span class="empty-project-badge">${escapeHtml(t("empty.pathMissing"))}</span>`}
+        <span>${escapeHtml(t("empty.sessions", { n: p.sessionCount || 0 }))}</span>
+        <span>${escapeHtml(formatRelativeActive(p.lastActive))}</span>
+      </div>
+    `
+    if (can) {
+      li.addEventListener("click", (e) => {
+        if (e.target.closest("input")) return
+        const cb = li.querySelector('input[type="checkbox"]')
+        if (cb && !cb.disabled) {
+          cb.checked = !cb.checked
+          syncEmptyImportButtons()
+        }
+      })
+    }
+    list.appendChild(li)
+  }
+  list.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+    cb.addEventListener("change", syncEmptyImportButtons)
+  })
+  const btnAll = $("btn-import-all")
+  if (btnAll) btnAll.hidden = importable.length < 2
+  syncEmptyImportButtons()
+}
+
+async function loadEmptyDiscover() {
+  const discover = $("empty-discover")
+  const meta = $("empty-meta")
+  const countEl = $("empty-discover-count")
+  setEmptyMsg("empty-import-msg", "")
+  setEmptyMsg("empty-manual-msg", "")
+  try {
+    const data = await api("/api/projects")
+    const projects = Array.isArray(data.projects) ? data.projects : []
+    if (meta) {
+      meta.hidden = false
+      meta.textContent = data.dbExists
+        ? t("empty.metaDb", { path: data.dbPath || "—" })
+        : t("empty.metaMissingDb", { path: data.dbPath || "—" })
+    }
+    if (countEl) countEl.textContent = String(projects.length)
+    if (discover) {
+      if (!projects.length) {
+        discover.hidden = false
+        const list = $("empty-project-list")
+        if (list) {
+          list.innerHTML = `<li class="empty" style="list-style:none">${escapeHtml(t("empty.noDiscover"))}</li>`
+        }
+        const btnSel = $("btn-import-selected")
+        const btnAll = $("btn-import-all")
+        if (btnSel) btnSel.disabled = true
+        if (btnAll) btnAll.hidden = true
+      } else {
+        discover.hidden = false
+        renderEmptyProjects(projects)
+      }
+    }
+  } catch (e) {
+    if (meta) {
+      meta.hidden = false
+      meta.textContent = e.message || String(e)
+    }
+    if (discover) {
+      discover.hidden = false
+      const list = $("empty-project-list")
+      if (list) {
+        list.innerHTML = `<li class="empty" style="list-style:none">${escapeHtml(e.message || String(e))}</li>`
+      }
+    }
+  }
+  mountIcons($("empty-state") || document)
+}
+
+async function importProjectRoot(projectRoot, label) {
+  const data = await api("/api/sources", {
+    method: "POST",
+    body: JSON.stringify({ projectRoot, label: label || undefined }),
+  })
+  return data.source
+}
+
+async function importSelectedDiscovered(importAll = false) {
+  const list = $("empty-project-list")
+  if (!list) return
+  const boxes = importAll
+    ? [...list.querySelectorAll('input[type="checkbox"]:not(:disabled)')]
+    : [...list.querySelectorAll('input[type="checkbox"]:checked:not(:disabled)')]
+  if (!boxes.length) {
+    setEmptyMsg("empty-import-msg", t("empty.needSelect"), true)
+    return
+  }
+  setEmptyMsg("empty-import-msg", t("empty.importing"))
+  const btnSel = $("btn-import-selected")
+  const btnAll = $("btn-import-all")
+  if (btnSel) btnSel.disabled = true
+  if (btnAll) btnAll.disabled = true
+  let lastSource = null
+  const labels = []
+  try {
+    for (const cb of boxes) {
+      const projectRoot = cb.getAttribute("data-worktree")
+      const label = cb.getAttribute("data-label") || undefined
+      if (!projectRoot) continue
+      lastSource = await importProjectRoot(projectRoot, label)
+      labels.push(lastSource.label)
+    }
+    if (!lastSource) {
+      setEmptyMsg("empty-import-msg", t("empty.needSelect"), true)
+      return
+    }
+    state.sourceId = lastSource.id
+    storageSet("sourceId", state.sourceId)
+    setEmptyMsg("empty-import-msg", t("msg.imported", { n: labels.join(", ") }))
+    await loadSources()
+    await loadDashboard()
+  } catch (e) {
+    setEmptyMsg("empty-import-msg", t("empty.importFailed", { err: e.message || String(e) }), true)
+  } finally {
+    if (btnAll) btnAll.disabled = false
+    syncEmptyImportButtons()
+  }
+}
+
+async function onEmptyManualImport() {
+  const projectRoot = $("empty-project-path")?.value.trim()
+  const label = $("empty-project-label")?.value.trim()
+  if (!projectRoot) {
+    setEmptyMsg("empty-manual-msg", t("msg.needPath"), true)
+    return
+  }
+  try {
+    setEmptyMsg("empty-manual-msg", t("empty.importing"))
+    const source = await importProjectRoot(projectRoot, label || undefined)
+    state.sourceId = source.id
+    storageSet("sourceId", state.sourceId)
+    if ($("empty-project-path")) $("empty-project-path").value = ""
+    if ($("empty-project-label")) $("empty-project-label").value = ""
+    setEmptyMsg("empty-manual-msg", t("msg.imported", { n: source.label }))
+    await loadSources()
+    await loadDashboard()
+  } catch (e) {
+    setEmptyMsg("empty-manual-msg", t("empty.importFailed", { err: e.message || String(e) }), true)
+  }
 }
 
 async function loadSources() {
@@ -542,19 +816,26 @@ async function loadSources() {
     select.appendChild(opt)
     state.sourceId = null
     storageRemove("sourceId")
-    return
+    return data
   }
   for (const s of data.sources) {
     const opt = document.createElement("option")
     opt.value = s.id
-    opt.textContent = s.label
-    opt.title = s.projectRoot
+    const missing = s.pathExists === false
+    opt.textContent = missing ? `${s.label} ${t("source.pathMissing")}` : s.label
+    opt.title = missing ? `${s.projectRoot} — ${t("empty.pathMissing")}` : s.projectRoot
+    if (missing) opt.dataset.missing = "1"
     select.appendChild(opt)
   }
   const exists = data.sources.some((s) => s.id === prev)
-  state.sourceId = exists ? prev : data.defaultSourceId || data.sources[0].id
+  const preferred =
+    data.defaultSourceId ||
+    data.sources.find((s) => s.pathExists !== false)?.id ||
+    data.sources[0].id
+  state.sourceId = exists ? prev : preferred
   select.value = state.sourceId
   storageSet("sourceId", state.sourceId)
+  return data
 }
 
 function agentDuration(a) {
@@ -634,8 +915,9 @@ function renderStatusStrip(data) {
     const chipMain = $("chip-main-text")
     if (chipMain) {
       chipMain.classList.remove("is-empty")
-      chipMain.innerHTML = agentChip(main.agent, { compact: true, short: true })
-      chipMain.title = main.title || main.agent || ""
+      const agentLabel = displayAgent(main.agent)
+      chipMain.innerHTML = agentChip(agentLabel, { compact: true, short: true })
+      chipMain.title = displayTitle(main.title) || agentLabel
     }
   } else {
     $("chip-main-status").className = "enum enum-unknown"
@@ -822,21 +1104,23 @@ function renderMain(data) {
   tile.title = (state.lang === "zh" ? "点击查看执行详情" : "Click for execution detail")
   $("main-enum").className = `enum ${enumClass(m.status)}`
   setText($("main-enum"), statusText(m.status))
-  setText($("main-title"), m.title)
+  setText($("main-title"), displayTitle(m.title))
   {
     const el = $("main-agent")
     if (el) {
       el.classList.remove("is-empty")
-      el.innerHTML = agentChip(m.agent)
-      el.title = m.agent || ""
+      const agentLabel = displayAgent(m.agent)
+      el.innerHTML = agentChip(agentLabel)
+      el.title = agentLabel
     }
   }
   {
     const el = $("main-model")
     if (el) {
       el.classList.remove("is-empty")
-      el.innerHTML = modelChip(m.model?.label || shortModel(m.model), { short: true })
-      el.title = m.model?.label || ""
+      const modelLabel = displayModelLabel(m.model?.label || shortModel(m.model))
+      el.innerHTML = modelChip(modelLabel, { short: true })
+      el.title = modelLabel
     }
   }
   setText($("main-started"), formatTime(m.timeCreated))
@@ -1051,22 +1335,24 @@ function renderBg(bg) {
       const cost = a.estimate?.matched ? formatUsd(a.estimate.usd) : "—"
       const dur = agentDuration(a)
       const tok = a.tokens || {}
-      const model = shortModel(a.model?.label)
+      const model = displayModelLabel(a.model?.label || shortModel(a.model?.label))
+      const titleLabel = displayTitle(a.title)
+      const agentLabel = displayAgent(a.agent)
       return `
         <article class="bg-item status-${barClass(a.status) || "unknown"}" data-session-id="${escapeHtml(a.id)}" title="${escapeHtml(state.lang === "zh" ? "点击查看执行详情" : "Click for detail")}">
           <header class="bg-item-h">
             <div class="bg-item-title">
-              <span class="bg-agent">${agentChip(a.agent)}</span>
+              <span class="bg-agent">${agentChip(agentLabel)}</span>
               <span class="enum ${enumClass(a.status)}">${escapeHtml(statusText(a.status))}</span>
             </div>
-            <p class="bg-task" title="${escapeHtml(a.title)}">${escapeHtml(a.title)}</p>
+            <p class="bg-task" title="${escapeHtml(titleLabel)}">${escapeHtml(titleLabel)}</p>
           </header>
           <div class="bg-time">
             <span>${icon("play")}<span class="lbl" data-keep>${escapeHtml(t("field.started"))}</span><b>${escapeHtml(formatTime(a.timeCreated))}</b></span>
             <span>${icon("clock")}<span class="lbl" data-keep>${escapeHtml(t("field.duration"))}</span><b>${escapeHtml(formatDuration(dur))}</b></span>
             <span>${icon("refresh")}<span class="lbl" data-keep>${escapeHtml(t("field.updated"))}</span><b>${escapeHtml(formatTime(a.timeUpdated))}</b></span>
           </div>
-          <div class="bg-model-row">${modelChip(a.model?.label || model, { short: true })}</div>
+          <div class="bg-model-row">${modelChip(model, { short: true })}</div>
           <div class="bg-grid two">
             <div class="bg-cell">${icon("circleDollar")}<div><span class="k">${escapeHtml(t("field.cost"))}</span><b>${escapeHtml(cost)}</b></div></div>
             <div class="bg-cell">${icon("layers")}<div><span class="k">Token</span><b>${escapeHtml(formatTokens(tok.total))}</b></div></div>
@@ -1085,10 +1371,10 @@ function renderBg(bg) {
 function modelRowHtml(m, { total = false } = {}) {
   const tok = m.tokens || {}
   const hit = cacheHitRate(tok)
-  const label = m.modelId || m.model || "—"
+  const label = displayModelLabel(m.modelId || m.model)
   const nameCell = total
     ? `<td><b>${escapeHtml(t("col.total"))}</b></td>`
-    : `<td title="${escapeHtml(m.model || label)}">${modelChip(label, { short: true })}</td>`
+    : `<td title="${escapeHtml(label)}">${modelChip(label, { short: true })}</td>`
   const cls = total ? ' class="is-total"' : ""
   return `
       <tr${cls}>
@@ -1195,12 +1481,15 @@ function renderModels(models) {
 
 function renderMeta(data) {
   const p = data.pricing
+  const missing = data.pathExists === false
   setText($("rail-foot"), [
     data.source?.label || "",
+    missing ? t("empty.pathMissing") : "",
     p ? `prices:${p.source}` : "",
     data.generatedAt ? formatTime(data.generatedAt) : "",
   ].filter(Boolean).join(" · "))
-  setText($("page-sub"), data.projectRoot || data.source?.label || "—")
+  const rootLabel = data.projectRoot || data.source?.label || "—"
+  setText($("page-sub"), missing ? `${rootLabel} · ${t("empty.pathMissing")}` : rootLabel)
 }
 
 
@@ -1522,19 +1811,41 @@ function renderWaterfall(data) {
 }
 
 
+function dashboardNote(data) {
+  if (!data) return ""
+  if (data.pathExists === false || data.noteCode === "path_missing") {
+    return t("note.pathMissing", { path: data.projectRoot || data.source?.label || "—" })
+  }
+  if (data.noteCode === "no_main_session") {
+    return t("note.noMainSession")
+  }
+  return data.note || ""
+}
+
+function displayTitle(title) {
+  const s = String(title || "").trim()
+  if (!s || s === "untitled" || s === "(无标题)") return t("label.untitled")
+  return s
+}
+
+function displayAgent(agent) {
+  const s = String(agent || "").trim()
+  if (!s || s === "unknown" || s === "(未知 agent)") return t("label.unknownAgent")
+  return s
+}
+
+function displayModelLabel(model) {
+  const s = String(model || "").trim()
+  if (!s || s === "unknown" || s === "(未知模型)") return t("label.unknownModel")
+  return s
+}
+
 function renderDashboard(data) {
   state.last = data
   state.now = Date.now()
-  setNote(data.note || "")
+  showEmptyState(false)
+  setNote(dashboardNote(data))
   renderMeta(data)
-
-  if (!data.main && !data.omo?.boulder?.present && !(data.omo?.todos || []).length) {
-    $("bento").hidden = true
-    $("status-strip").hidden = true
-    if ($("tile-waterfall")) $("tile-waterfall").hidden = true
-    setNote(t("empty.noProject"))
-    return
-  }
 
   $("bento").hidden = false
   renderStatusStrip(data)
@@ -1552,13 +1863,14 @@ function renderDashboard(data) {
 async function loadDashboard() {
   setError("")
   if (!state.sourceId) {
-    $("bento").hidden = true
-    $("status-strip").hidden = true
-    setNote(t("empty.noProject"))
+    setNote("")
     setText($("page-sub"), "—")
     setText($("rail-foot"), "")
+    showEmptyState(true)
+    await loadEmptyDiscover()
     return
   }
+  showEmptyState(false)
   const data = await api(`/api/dashboard?sourceId=${encodeURIComponent(state.sourceId)}`)
   renderDashboard(data)
 }
@@ -1609,6 +1921,7 @@ function setupAutoRefresh() {
   }
   if ($("auto-refresh").checked) {
     state.timer = setInterval(() => {
+      if (!state.sourceId) return
       loadDashboard()
         .then(() => {
           if (!detailDrawer?.getOpenId?.()) return
@@ -1628,7 +1941,8 @@ function setLang(lang) {
   storageSet("lang", state.lang)
   applyTheme()
   applyI18n()
-  if (state.last) renderDashboard(state.last)
+  if (state.sourceId && state.last) renderDashboard(state.last)
+  else if (!state.sourceId) loadEmptyDiscover().catch((e) => setError(e.message || String(e)))
 }
 
 function setTheme(theme) {
@@ -1665,6 +1979,18 @@ async function boot() {
   }
   $("project-path").addEventListener("keydown", (e) => {
     if (e.key === "Enter") onImport()
+  })
+  $("btn-import-selected")?.addEventListener("click", () => {
+    importSelectedDiscovered(false).catch((e) => setError(e.message || String(e)))
+  })
+  $("btn-import-all")?.addEventListener("click", () => {
+    importSelectedDiscovered(true).catch((e) => setError(e.message || String(e)))
+  })
+  $("btn-empty-import")?.addEventListener("click", () => {
+    onEmptyManualImport().catch((e) => setError(e.message || String(e)))
+  })
+  $("empty-project-path")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") onEmptyManualImport().catch((err) => setError(err.message || String(err)))
   })
 
   document.querySelectorAll("[data-lang-set]").forEach((btn) => {
