@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="light" data-lang="zh">
+<html lang="en" data-theme="light" data-lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -83,6 +83,49 @@
 
       <p id="error" class="banner error" hidden></p>
       <p id="note" class="banner note" hidden></p>
+
+      <section class="empty-state" id="empty-state" hidden>
+        <div class="empty-state-card">
+          <div class="empty-state-icon" aria-hidden="true">
+            <span class="ico-slot" data-ico="folder"></span>
+          </div>
+          <h2 id="empty-title" data-i18n="empty.title">导入项目开始监控</h2>
+          <p class="empty-state-lead" id="empty-lead" data-i18n="empty.lead">
+            从本机 OpenCode 数据库发现的项目中选择，或手动填写路径。
+          </p>
+          <p class="empty-state-meta" id="empty-meta" hidden></p>
+
+          <div class="empty-discover" id="empty-discover" hidden>
+            <div class="empty-discover-head">
+              <span data-i18n="empty.discoverTitle">在 OpenCode 中发现</span>
+              <span class="badge" id="empty-discover-count">0</span>
+            </div>
+            <ul class="empty-project-list" id="empty-project-list" role="list"></ul>
+            <div class="empty-discover-actions">
+              <button type="button" id="btn-import-selected" class="btn btn-primary" data-i18n="empty.importSelected" disabled>
+                导入选中
+              </button>
+              <button type="button" id="btn-import-all" class="btn btn-ghost" data-i18n="empty.importAll" hidden>
+                全部导入
+              </button>
+            </div>
+            <p id="empty-import-msg" class="msg" hidden></p>
+          </div>
+
+          <div class="empty-fallback" id="empty-fallback">
+            <p class="empty-fallback-title" data-i18n="empty.manualTitle">手动导入</p>
+            <div class="empty-manual-row">
+              <input id="empty-project-path" type="text" data-i18n-placeholder="ph.path" placeholder="项目绝对路径" spellcheck="false" />
+              <input id="empty-project-label" type="text" data-i18n-placeholder="ph.label" placeholder="显示名称（可选）" />
+              <button type="button" id="btn-empty-import" class="btn btn-primary" data-i18n="action.import">导入</button>
+            </div>
+            <p class="empty-hint" data-i18n="empty.hint">
+              需先在该目录用 OpenCode 跑过会话；导入只登记路径，不修改 OpenCode 数据。
+            </p>
+            <p id="empty-manual-msg" class="msg" hidden></p>
+          </div>
+        </div>
+      </section>
 
       <section class="board" id="bento" hidden>
         <!-- Row 1: metrics full width, compact fixed -->
