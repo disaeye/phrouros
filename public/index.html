@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light" data-lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Phrouros</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div id="app" class="shell">
+      <div class="sticky-chrome" id="sticky-chrome">
+        <header class="topbar">
+          <div class="brand-block">
+            <div class="logo" aria-hidden="true"></div>
+            <div class="brand-text">
+              <h1 id="page-title" data-i18n="app.title">Phrouros</h1>
+              <p class="topbar-sub" id="page-sub">—</p>
+            </div>
+          </div>
+          <div class="topbar-controls">
+            <select id="source-select" class="top-select" aria-label="project"></select>
+            <button type="button" id="btn-refresh" class="btn btn-icon btn-icon-only" data-i18n-title="action.refresh" title="刷新" aria-label="刷新">
+              <span class="ico-slot" data-ico="refresh"></span>
+            </button>
+            <div class="icon-seg" role="group" aria-label="language">
+              <button type="button" class="icon-seg-btn" data-lang-set="zh" title="中文" aria-label="中文">
+                <span class="glyph-label" aria-hidden="true">文</span>
+              </button>
+              <button type="button" class="icon-seg-btn" data-lang-set="en" title="English" aria-label="English">
+                <span class="glyph-label" aria-hidden="true">A</span>
+              </button>
+            </div>
+            <div class="icon-seg" role="group" aria-label="theme">
+              <button type="button" class="icon-seg-btn" data-theme-set="light" data-i18n-title="theme.light" title="日间" aria-label="日间">
+                <span class="ico-slot" data-ico="sun"></span>
+              </button>
+              <button type="button" class="icon-seg-btn" data-theme-set="dark" data-i18n-title="theme.dark" title="夜间" aria-label="夜间">
+                <span class="ico-slot" data-ico="moon"></span>
+              </button>
+            </div>
+            <label class="btn btn-icon btn-icon-only check-icon" title="自动刷新" data-i18n-title="action.auto">
+              <input type="checkbox" id="auto-refresh" checked />
+              <span class="ico-slot" data-ico="play" aria-hidden="true"></span>
+            </label>
+            <div class="topbar-status" id="live-badge" title="实时" data-i18n-title="status.live">
+              <span class="pulse" aria-hidden="true"></span>
+            </div>
+          </div>
+        </header>
+
+        <section class="status-strip" id="status-strip" hidden>
+          <button type="button" class="status-chip" data-jump="tile-main">
+            <span class="enum enum-idle" id="chip-main-status">—</span>
+            <div class="chip-copy">
+              <div class="chip-k" data-i18n="kpi.main">主会话</div>
+              <div class="chip-v" id="chip-main-text">—</div>
+            </div>
+          </button>
+          <button type="button" class="status-chip" data-jump="tile-omo">
+            <span class="enum enum-unknown" id="chip-plan-status">—</span>
+            <div class="chip-copy">
+              <div class="chip-k" data-i18n="kpi.plan">计划</div>
+              <div class="chip-v" id="chip-plan-text">—</div>
+            </div>
+          </button>
+          <button type="button" class="status-chip" data-jump="tile-bg">
+            <span class="enum enum-running" id="chip-bg-status">—</span>
+            <div class="chip-copy">
+              <div class="chip-k" data-i18n="kpi.background">后台</div>
+              <div class="chip-v" id="chip-bg-text">—</div>
+            </div>
+          </button>
+          <button type="button" class="status-chip" data-jump="tile-models">
+            <span class="enum enum-cost">$</span>
+            <div class="chip-copy">
+              <div class="chip-k" data-i18n="kpi.cost">费用</div>
+              <div class="chip-v" id="chip-cost-text">—</div>
+            </div>
+          </button>
+        </section>
+      </div>
+
+      <p id="error" class="banner error" hidden></p>
+      <p id="note" class="banner note" hidden></p>
+
+      <section class="board" id="bento" hidden>
+        <!-- Row 1: metrics full width, compact fixed -->
+        <article class="tile tile-metrics" id="tile-metrics">
+          <div class="tile-h">
+            <h2><span class="ico-slot" data-ico="activity"></span><span data-i18n="section.metrics">项目总览</span></h2>
+            <span class="tile-hint" id="rail-foot"></span>
+          </div>
+          <div class="tile-body tile-body-fixed">
+            <div class="metric-grid" id="metric-grid"></div>
+          </div>
+        </article>
+
+        <!-- Waterfall timeline -->
+        <article class="tile tile-wide tile-waterfall" id="tile-waterfall" hidden>
+          <div class="tile-h">
+            <div class="tile-h-left">
+              <h2><span class="ico-slot" data-ico="activity"></span><span data-i18n="section.waterfall">执行瀑布</span></h2>
+              <p class="card-desc" data-i18n="waterfall.desc">横轴时间 · 纵轴 Agent · 点击色块查看详情</p>
+            </div>
+            <div class="wf-controls">
+              <label class="check-row compact">
+                <input type="checkbox" id="wf-follow" checked />
+                <span data-i18n="waterfall.follow">跟随现在</span>
+              </label>
+              <span class="badge" id="wf-count">0</span>
+            </div>
+          </div>
+          <div class="tile-body wf-body">
+            <div class="wf-shell" id="wf-shell">
+              <div class="wf-yaxis" id="wf-yaxis"></div>
+              <div class="wf-scroll" id="wf-scroll">
+                <div class="wf-canvas" id="wf-canvas">
+                  <div class="wf-grid" id="wf-grid"></div>
+                  <div class="wf-now" id="wf-now"></div>
+                  <div class="wf-lanes" id="wf-lanes"></div>
+                </div>
+              </div>
+            </div>
+            <div class="wf-legend" id="wf-legend"></div>
+          </div>
+        </article>
+
+        <!-- Row 2: two equal cards -->
+        <article class="tile" id="tile-main" hidden>
+          <div class="tile-h">
+            <div class="tile-h-left">
+              <h2><span class="ico-slot" data-ico="bot"></span><span data-i18n="section.main">主 Agent</span></h2>
+              <span class="enum" id="main-enum">—</span>
+            </div>
+          </div>
+          <div class="tile-body">
+            <h3 class="headline" id="main-title">—</h3>
+            <div class="time-line">
+              <span><span data-i18n="field.started">开始</span><b id="main-started">—</b></span>
+              <span><span data-i18n="field.duration">时长</span><b id="main-duration">—</b></span>
+              <span><span data-i18n="field.updated">更新</span><b id="main-updated">—</b></span>
+            </div>
+            <div class="kv">
+              <div><span data-i18n="field.agent">Agent</span><b id="main-agent">—</b></div>
+              <div class="kv-model"><span data-i18n="field.model">模型</span><div id="main-model" class="model-slot">—</div></div>
+              <div><span data-i18n="field.cost">费用</span><b id="main-cost">—</b></div>
+              <div><span data-i18n="field.tokens">Token</span><b id="main-tokens">—</b></div>
+            </div>
+            <div class="token-breakdown">
+              <div class="token-cell"><span class="k" data-i18n="token.in">输入</span><span class="v" id="main-in">—</span></div>
+              <div class="token-cell"><span class="k" data-i18n="token.out">输出</span><span class="v" id="main-out">—</span></div>
+              <div class="token-cell"><span class="k" data-i18n="token.reason">推理</span><span class="v" id="main-reason">—</span></div>
+              <div class="token-cell"><span class="k" data-i18n="token.cache">缓存</span><span class="v" id="main-cache">—</span></div>
+            </div>
+            <div class="mono sid" id="main-id"></div>
+          </div>
+        </article>
+
+        <article class="tile" id="tile-omo" hidden>
+          <div class="tile-h">
+            <div class="tile-h-left">
+              <h2><span class="ico-slot" data-ico="workflow"></span><span data-i18n="section.omo">计划进度</span></h2>
+              <span class="enum" id="omo-enum">—</span>
+            </div>
+            <span class="badge" id="omo-active-count">0</span>
+          </div>
+          <div class="tile-body">
+            <h3 class="headline" id="omo-name">—</h3>
+            <p class="card-desc" id="omo-desc" data-i18n="omo.desc">当前计划的整体进度（boulder + 计划清单）</p>
+            <div class="progress" id="omo-progress">
+              <div class="progress-top">
+                <span id="omo-progress-text">—</span>
+                <span class="tabular" id="omo-progress-pct">—</span>
+              </div>
+              <div class="progress-track"><div class="progress-fill" id="omo-progress-fill"></div></div>
+            </div>
+            <div class="omo-stats" id="omo-stats"></div>
+            <div class="meta" id="omo-meta"></div>
+            <div class="subh" id="omo-active-label"><span data-i18n="section.activeTasks">进行中委派</span></div>
+            <div id="omo-active" class="stack"></div>
+          </div>
+        </article>
+
+        <!-- Row 3: two equal cards -->
+        <article class="tile" id="tile-bg" hidden>
+          <div class="tile-h">
+            <div class="tile-h-left">
+              <h2><span class="ico-slot" data-ico="users"></span><span data-i18n="section.background">后台 Agent</span></h2>
+            </div>
+            <span class="badge" id="bg-count">0</span>
+          </div>
+          <div class="tile-body">
+            <div class="legend" id="bg-legend"></div>
+            <div id="bg-body" class="agent-list"></div>
+          </div>
+        </article>
+
+        <article class="tile" id="tile-models" hidden>
+          <div class="tile-h">
+            <h2><span class="ico-slot" data-ico="cpu"></span><span data-i18n="section.models">模型消耗</span></h2>
+            <span class="tile-hint" id="models-scope" data-i18n="metric.scopeHint">主会话树 · 非全项目历史</span>
+          </div>
+          <div class="tile-body">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th data-i18n="col.model">模型</th>
+                    <th data-i18n="col.sessions">会话</th>
+                    <th data-i18n="col.usd">$</th>
+                    <th data-i18n="col.in">入</th>
+                    <th data-i18n="col.out">出</th>
+                    <th data-i18n="col.reason">推</th>
+                    <th data-i18n="col.cacheR">缓存读</th>
+                    <th data-i18n="col.cacheW">缓存写</th>
+                    <th data-i18n="col.hit">命中</th>
+                    <th data-i18n="col.token">合计</th>
+                    <th data-i18n="col.rate">单价源</th>
+                  </tr>
+                </thead>
+                <tbody id="model-body"></tbody>
+                <tfoot id="model-foot"></tfoot>
+              </table>
+            </div>
+          </div>
+        </article>
+
+        <!-- Row 4: details equal height full width -->
+        <article class="tile tile-wide" id="tile-details" hidden>
+          <div class="tile-h">
+            <div class="tile-h-left col">
+              <h2><span class="ico-slot" data-ico="listTodo"></span><span data-i18n="section.details">工作明细</span></h2>
+              <p class="card-desc" data-i18n="details.desc">三类清单含义不同，请按标签切换</p>
+            </div>
+            <div class="tabs" id="detail-tabs">
+              <button type="button" class="tab active" data-tab="steps">
+                <span class="ico-slot" data-ico="listChecks"></span>
+                <span class="tab-text" data-i18n="tab.steps">计划清单</span>
+              </button>
+              <button type="button" class="tab" data-tab="todos">
+                <span class="ico-slot" data-ico="listTodo"></span>
+                <span class="tab-text" data-i18n="tab.todos">主会话待办</span>
+              </button>
+              <button type="button" class="tab" data-tab="tasks">
+                <span class="ico-slot" data-ico="workflow"></span>
+                <span class="tab-text" data-i18n="tab.tasks">委派任务</span>
+              </button>
+            </div>
+          </div>
+          <div class="tile-body details-body">
+            <p class="tab-hint" id="tab-hint">—</p>
+            <div id="tab-steps" class="tab-panel stack"></div>
+            <div id="tab-todos" class="tab-panel stack" hidden></div>
+            <div id="tab-tasks" class="tab-panel stack" hidden></div>
+          </div>
+        </article>
+      </section>
+
+      <details class="import-panel">
+        <summary data-i18n="section.import">导入 / 管理项目</summary>
+        <div class="import-body">
+          <input id="project-path" type="text" data-i18n-placeholder="ph.path" placeholder="项目绝对路径" spellcheck="false" />
+          <input id="project-label" type="text" data-i18n-placeholder="ph.label" placeholder="显示名称（可选）" />
+          <button type="button" id="btn-import" class="btn btn-primary" data-i18n="action.import">导入</button>
+          <button type="button" id="btn-remove" class="btn btn-ghost" data-i18n="action.remove">移除当前</button>
+          <p id="import-msg" class="msg" hidden></p>
+        </div>
+      </details>
+    </div>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
