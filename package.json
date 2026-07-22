@@ -1,17 +1,49 @@
 {
   "name": "phrouros",
   "version": "0.1.0",
-  "private": true,
-  "type": "module",
   "description": "Phrouros — local monitoring dashboard for OpenCode and oh-my-openagent (single Bun process, read-only SQLite)",
+  "type": "module",
+  "license": "MIT",
+  "author": "disaeye",
   "bin": {
-    "phrouros": "./src/server.ts"
+    "phrouros": "./bin/phrouros"
   },
+  "files": [
+    "bin",
+    "src",
+    "public",
+    "LICENSE",
+    "README.md",
+    "README.zh-CN.md",
+    "CHANGELOG.md"
+  ],
   "scripts": {
     "start": "bun run src/server.ts",
-    "dev": "bun --hot run src/server.ts"
+    "dev": "bun --hot run src/server.ts",
+    "prepublishOnly": "bun -e \"import fs from 'node:fs'; for (const p of ['bin/phrouros','public/index.html','src/server.ts']) { if (!fs.existsSync(p)) throw new Error('package incomplete: missing '+p) }\" && bun run src/server.ts --help"
   },
   "engines": {
     "bun": ">=1.1.0"
-  }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/disaeye/phrouros.git"
+  },
+  "homepage": "https://github.com/disaeye/phrouros#readme",
+  "bugs": {
+    "url": "https://github.com/disaeye/phrouros/issues"
+  },
+  "keywords": [
+    "opencode",
+    "oh-my-openagent",
+    "dashboard",
+    "agent",
+    "monitoring",
+    "bun",
+    "phrouros",
+    "cli"
+  ]
 }

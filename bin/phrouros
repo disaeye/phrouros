@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Resolve symlinks so node_modules/.bin/phrouros → package root works.
+source_path="${BASH_SOURCE[0]:-$0}"
+while [ -L "$source_path" ]; do
+  dir="$(cd -P "$(dirname "$source_path")" && pwd)"
+  link="$(readlink "$source_path")"
+  case "$link" in
+    /*) source_path="$link" ;;
+    *) source_path="$dir/$link" ;;
+  esac
+done
+ROOT="$(cd -P "$(dirname "$source_path")/.." && pwd)"
+
+if ! command -v bun >/dev/null 2>&1; then
+  echo "phrouros requires Bun ≥ 1.1 (https://bun.sh)" >&2
+  echo "Install Bun, then re-run: bunx phrouros" >&2
+  exit 1
+fi
+
+exec bun "$ROOT/src/server.ts" "$@"
