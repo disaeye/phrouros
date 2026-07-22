@@ -2,6 +2,7 @@
 
 [![Bun](https://img.shields.io/badge/runtime-Bun%20%E2%89%A5%201.1-f472b6?logo=bun)](https://bun.sh)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+[![npm](https://img.shields.io/badge/npm-phrouros-cb3837?logo=npm)](https://www.npmjs.com/package/phrouros)
 [![中文文档](https://img.shields.io/badge/docs-中文-red)](./README.zh-CN.md)
 
 **Phrouros** (φρουρός — sentinel) is a lightweight **local agent monitoring dashboard**.
@@ -19,15 +20,17 @@ When a project uses [oh-my-openagent](https://github.com/code-yeongyu/oh-my-open
 - [Why this exists](#why-this-exists)
 - [Features](#features)
 - [Requirements](#requirements)
-- [Quick start](#quick-start)
+- [Install](#install)
 - [Configuration](#configuration)
 - [How it works](#how-it-works)
 - [HTTP API](#http-api)
+- [Troubleshooting](#troubleshooting)
 - [Privacy & security](#privacy--security)
 - [Project layout](#project-layout)
 - [Development](#development)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
+- [Changelog](#changelog)
 - [License](#license)
 - [Acknowledgments](#acknowledgments)
 
@@ -72,32 +75,55 @@ OpenCode can spawn many sessions and sub-agents. Token burn, which agent is runn
 
 ---
 
-## Quick start
+## Install
+
+Requires [Bun](https://bun.sh) **≥ 1.1** on your machine.
+
+> **Runtime note:** This package is **Bun-only**. Plain `node` / `npx` cannot run it. On Windows, use [Bun for Windows](https://bun.sh) (or WSL); the CLI wrapper is a small shell script that invokes `bun`.
 
 ```bash
-git clone https://github.com/disaeye/phrouros.git
-cd phrouros
-bun run start
+# one-shot (recommended)
+bunx phrouros
+
+# or install globally
+bun add -g phrouros
+phrouros
 ```
 
-Open:
-
-```text
-http://127.0.0.1:51234
-```
-
-Hot reload during development:
+The server listens on `http://127.0.0.1:51234` by default and opens your browser automatically.
 
 ```bash
-bun run dev
+phrouros --help
+phrouros --version
+phrouros --no-open          # do not open browser
+phrouros --host 0.0.0.0     # LAN access (trusted networks only)
+```
+
+From a git checkout (before/without npm):
+
+```bash
+./bin/phrouros --help
+# same as:
+bun run src/server.ts --help
 ```
 
 ### First-time use
 
-1. Start the server.
-2. Open the UI → **Import / manage project**.
-3. Enter an absolute project path (and optional label) → **Import**.
-4. Select the project in the top bar; the board refreshes automatically (auto-refresh is on by default).
+1. Run `bunx phrouros` (browser opens).
+2. If no project is registered yet, the **empty state** lists projects discovered from your local OpenCode database — select and **Import**.
+3. Or paste an absolute project path under manual import.
+4. The board auto-refreshes by default; switch projects from the top bar.
+5. If a previously imported path was deleted or moved, the source still appears (marked **path missing**). Switch to another project or **Remove** it and re-import.
+
+### Development (contributors)
+
+```bash
+git clone https://github.com/disaeye/phrouros.git
+cd phrouros
+bun run dev     # hot reload
+bun run start
+./bin/phrouros --no-open
+```
 
 ---
 
@@ -107,11 +133,13 @@ bun run dev
 
 | Flag | Environment variable | Default | Description |
 | --- | --- | --- | --- |
-| `--host <addr>` | `PHROUROS_HOST` / `HOST` | `0.0.0.0` | Listen address |
+| `--host <addr>` | `PHROUROS_HOST` / `HOST` | `127.0.0.1` | Listen address |
 | `--port <n>` | `PHROUROS_PORT` / `PORT` | `51234` | Listen port |
 | `--project <path>` | `PHROUROS_PROJECT` | — | Default project directory |
 | `--db <path>` | `OPENCODE_DB_PATH` | see below | Path to `opencode.db` |
 | `--storage <path>` | — | OpenCode storage root | Root for `sources.json` |
+| `--open` / `--no-open` | `PHROUROS_NO_OPEN=1` | open browser | Open UI after start |
+| `-v`, `--version` | — | — | Print version |
 | `-h`, `--help` | — | — | Print help |
 
 Default database path:
@@ -123,11 +151,11 @@ ${XDG_DATA_HOME:-~/.local/share}/opencode/opencode.db
 Examples:
 
 ```bash
-# localhost only
-bun run src/server.ts --host 127.0.0.1 --port 51234
+# LAN bind (trusted networks only)
+phrouros --host 0.0.0.0 --port 51234
 
 # custom OpenCode DB
-OPENCODE_DB_PATH=/path/to/opencode.db bun run start
+OPENCODE_DB_PATH=/path/to/opencode.db phrouros
 ```
 
 ---
@@ -178,13 +206,19 @@ Pricing is cached under `~/.cache/phrouros/` (default TTL ~6h). On failure the a
 | Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/api/health` | Health check + DB path |
-| `GET` | `/api/sources` | List imported projects |
-| `POST` | `/api/sources` | Import `{ "projectRoot": "...", "label?": "..." }` |
+| `GET` | `/api/sources` | List imported projects (`pathExists` per entry; `defaultSourceId` prefers an existing path) |
+| `POST` | `/api/sources` | Import `{ "projectRoot": "...", "label?": "..." }` (directory must exist) |
 | `DELETE` | `/api/sources/:id` | Unregister source (does not delete OpenCode data) |
-| `GET` | `/api/dashboard?sourceId=` | Full board snapshot (tokens, agents, OMO, estimates) |
+| `GET` | `/api/dashboard?sourceId=` | Full board snapshot (`pathExists`, tokens, agents, OMO, estimates) |
 | `GET` | `/api/session/:id` | Session execution detail |
 | `GET` | `/api/pricing?refresh=1` | Pricing catalog meta; `refresh=1` forces re-fetch |
-| `GET` | `/api/projects` | Projects discovered in the DB |
+| `GET` | `/api/projects` | Projects discovered in the DB (`pathExists` when worktree is known) |
+
+### Sources & missing directories
+
+- Import **requires** an existing directory; re-import of a moved path is a new entry if the absolute path changed.
+- If a registered `projectRoot` later disappears, `GET /api/sources` still lists it with `pathExists: false`.
+- `GET /api/dashboard` returns **HTTP 200** with an empty board and a clear `note` (not a 404/500). Prefer switching project or `DELETE /api/sources/:id`.
 
 ### Session detail payload (summary)
 
@@ -192,14 +226,29 @@ Returns metadata only: turn labels, tool names/status/duration, todos, parent/ch
 
 ---
 
+## Troubleshooting
+
+| Symptom | What to check |
+| --- | --- |
+| `phrouros requires Bun ≥ 1.1` | Install Bun from [bun.sh](https://bun.sh), then re-run `bunx phrouros` |
+| `npx phrouros` / plain Node fails | Expected — use `bunx` / `bun add -g`, not `npx` |
+| Empty board / “no main session” | Run OpenCode at least once in that project directory; confirm `--db` / `OPENCODE_DB_PATH` |
+| Source shows **path missing** | Directory was moved/deleted; switch project or remove source and re-import the new path |
+| Wrong database | `OPENCODE_DB_PATH=/path/to/opencode.db phrouros` or `--db` |
+| Port in use | `phrouros --port 51235` |
+| Browser does not open | Open `http://127.0.0.1:51234` manually, or use `--no-open` on headless hosts |
+| macOS / Windows DB path | Defaults follow XDG-style `~/.local/share/opencode/`; override with `--db` if OpenCode stores elsewhere |
+
+---
+
 ## Privacy & security
 
 - **Read-only** access to OpenCode SQLite — never writes the OpenCode database.
 - UI intentionally **omits** prompt text, tool parameters, and tool results.
-- Default bind is `0.0.0.0`. Use only on trusted networks, or bind localhost:
+- Default bind is `127.0.0.1`. For LAN access, only on trusted networks:
 
   ```bash
-  bun run src/server.ts --host 127.0.0.1
+  phrouros --host 0.0.0.0
   ```
 
 - Source import stores absolute paths in `sources.json` under your OpenCode storage tree.
@@ -210,6 +259,8 @@ Returns metadata only: turn labels, tool names/status/duration, todos, parent/ch
 
 ```text
 phrouros/
+├── bin/
+│   └── phrouros            # npm/bun bin → bun src/server.ts
 ├── public/                 # Zero-build SPA
 │   ├── index.html
 │   ├── styles.css
@@ -218,7 +269,7 @@ phrouros/
 │   ├── icons.js
 │   └── vendor/
 ├── src/
-│   ├── server.ts           # HTTP entry (CLI: phrouros)
+│   ├── server.ts           # HTTP + CLI flags
 │   ├── db.ts               # Dashboard queries / main session resolve
 │   ├── session-detail.ts   # /api/session/:id
 │   ├── omo.ts              # boulder / plan helpers
@@ -227,6 +278,7 @@ phrouros/
 │   └── paths.ts            # XDG / path helpers
 ├── package.json
 ├── tsconfig.json
+├── CHANGELOG.md
 ├── README.md
 ├── README.zh-CN.md
 └── LICENSE
@@ -237,10 +289,10 @@ phrouros/
 ## Development
 
 ```bash
-# install nothing (Bun only)
+# Bun only — no npm install required for app deps
 bun run dev          # hot reload
 bun run start        # production-style run
-bun run src/server.ts --help
+./bin/phrouros --help
 ```
 
 There is no bundler step. Edit `public/*` and refresh the browser; restart the server when changing `src/*` (or use `bun run dev`).
@@ -252,6 +304,23 @@ git checkout -b feat/your-change
 # ... commit ...
 git push -u origin feat/your-change
 # open a pull request into main
+```
+
+Publish checklist (maintainers):
+
+```bash
+# 1. version + changelog
+# 2. smoke from packed tarball
+npm pack --dry-run          # must include bin/, src/, public/
+npm pack
+bun add -g ./phrouros-*.tgz
+phrouros --version
+phrouros --no-open
+# 3. publish (requires npm login; package is public)
+npm publish --access public
+# 4. verify
+bunx phrouros --version
+npm view phrouros version
 ```
 
 ---
@@ -279,6 +348,12 @@ Contributions are welcome.
 Please do not commit secrets, local OpenCode databases, or agent workspace artifacts (`.omo/`, `.codegraph/` are gitignored).
 
 Bug reports and feature requests: use [GitHub Issues](https://github.com/disaeye/phrouros/issues).
+
+---
+
+## Changelog
+
+See [CHANGELOG.md](./CHANGELOG.md).
 
 ---
 

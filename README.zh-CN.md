@@ -2,6 +2,7 @@
 
 [![Bun](https://img.shields.io/badge/runtime-Bun%20%E2%89%A5%201.1-f472b6?logo=bun)](https://bun.sh)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+[![npm](https://img.shields.io/badge/npm-phrouros-cb3837?logo=npm)](https://www.npmjs.com/package/phrouros)
 [![English](https://img.shields.io/badge/docs-English-blue)](./README.md)
 
 **Phrouros**（φρουρός，哨兵）是**本地 agent 监控看板**，面向 [OpenCode](https://github.com/sst/opencode) 与 [oh-my-openagent](https://github.com/code-yeongyu/oh-my-openagent)。
@@ -19,15 +20,17 @@
 - [为什么需要](#为什么需要)
 - [功能](#功能)
 - [环境要求](#环境要求)
-- [快速开始](#快速开始)
+- [安装](#安装)
 - [配置](#配置)
 - [工作原理](#工作原理)
 - [HTTP API](#http-api)
+- [故障排查](#故障排查)
 - [隐私与安全](#隐私与安全)
 - [目录结构](#目录结构)
 - [开发](#开发)
 - [路线图](#路线图)
 - [贡献](#贡献)
+- [更新日志](#更新日志)
 - [许可证](#许可证)
 - [致谢](#致谢)
 
@@ -72,32 +75,55 @@ OpenCode 会拉起大量 session / 子 agent。Token 消耗、谁在跑，以及
 
 ---
 
-## 快速开始
+## 安装
+
+需要本机已安装 [Bun](https://bun.sh) **≥ 1.1**。
+
+> **运行时说明：** 本包 **仅支持 Bun**。纯 `node` / `npx` 无法运行。Windows 请安装 [Bun for Windows](https://bun.sh)（或 WSL）；CLI 入口是一小段 shell 脚本，内部调用 `bun`。
 
 ```bash
-git clone https://github.com/disaeye/phrouros.git
-cd phrouros
-bun run start
+# 推荐：一次性运行
+bunx phrouros
+
+# 或全局安装
+bun add -g phrouros
+phrouros
 ```
 
-浏览器打开：
-
-```text
-http://127.0.0.1:51234
-```
-
-开发热重载：
+默认监听 `http://127.0.0.1:51234`，并自动打开浏览器。
 
 ```bash
-bun run dev
+phrouros --help
+phrouros --version
+phrouros --no-open          # 不自动打开浏览器
+phrouros --host 0.0.0.0     # 局域网访问（仅可信网络）
+```
+
+从 git 检出目录直接跑（未发布到 npm 时）：
+
+```bash
+./bin/phrouros --help
+# 等价于：
+bun run src/server.ts --help
 ```
 
 ### 首次使用
 
-1. 启动服务。
-2. 打开 UI → **导入 / 管理项目**。
-3. 填写项目绝对路径（可选显示名）→ **导入**。
-4. 在顶栏选择项目；看板默认开启自动刷新。
+1. 运行 `bunx phrouros`（浏览器会自动打开）。
+2. 若尚未登记项目，**空状态**会列出本机 OpenCode 数据库中发现的项目 → 勾选后 **导入**。
+3. 也可在手动导入中粘贴项目绝对路径。
+4. 看板默认自动刷新；顶栏可切换项目。
+5. 若曾导入的路径已被删除或移动，该源仍会显示（标记为 **路径不存在**）。请切换到其他项目，或 **移除** 后按新路径重新导入。
+
+### 开发（贡献者）
+
+```bash
+git clone https://github.com/disaeye/phrouros.git
+cd phrouros
+bun run dev     # 热重载
+bun run start
+./bin/phrouros --no-open
+```
 
 ---
 
@@ -107,11 +133,13 @@ bun run dev
 
 | 参数 | 环境变量 | 默认 | 说明 |
 | --- | --- | --- | --- |
-| `--host <addr>` | `PHROUROS_HOST` / `HOST` | `0.0.0.0` | 监听地址 |
+| `--host <addr>` | `PHROUROS_HOST` / `HOST` | `127.0.0.1` | 监听地址 |
 | `--port <n>` | `PHROUROS_PORT` / `PORT` | `51234` | 端口 |
 | `--project <path>` | `PHROUROS_PROJECT` | — | 默认 project 目录 |
 | `--db <path>` | `OPENCODE_DB_PATH` | 见下 | `opencode.db` 路径 |
 | `--storage <path>` | — | OpenCode storage 根 | `sources.json` 所在树 |
+| `--open` / `--no-open` | `PHROUROS_NO_OPEN=1` | 打开浏览器 | 启动后是否打开 UI |
+| `-v`, `--version` | — | — | 打印版本 |
 | `-h`, `--help` | — | — | 帮助 |
 
 默认数据库路径：
@@ -123,11 +151,11 @@ ${XDG_DATA_HOME:-~/.local/share}/opencode/opencode.db
 示例：
 
 ```bash
-# 仅本机访问
-bun run src/server.ts --host 127.0.0.1 --port 51234
+# 局域网绑定（仅可信网络）
+phrouros --host 0.0.0.0 --port 51234
 
 # 自定义 OpenCode 数据库
-OPENCODE_DB_PATH=/path/to/opencode.db bun run start
+OPENCODE_DB_PATH=/path/to/opencode.db phrouros
 ```
 
 ---
@@ -178,13 +206,19 @@ OPENCODE_DB_PATH=/path/to/opencode.db bun run start
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET` | `/api/health` | 健康检查 + 数据库路径 |
-| `GET` | `/api/sources` | 已导入项目 |
-| `POST` | `/api/sources` | 导入 `{ "projectRoot": "...", "label?": "..." }` |
+| `GET` | `/api/sources` | 已导入项目（每项含 `pathExists`；`defaultSourceId` 优先选目录仍存在的源） |
+| `POST` | `/api/sources` | 导入 `{ "projectRoot": "...", "label?": "..." }`（目录必须存在） |
 | `DELETE` | `/api/sources/:id` | 移除登记（不删除 OpenCode 数据） |
-| `GET` | `/api/dashboard?sourceId=` | 看板完整快照 |
+| `GET` | `/api/dashboard?sourceId=` | 看板完整快照（含 `pathExists`、Token、agent、OMO、费用估算） |
 | `GET` | `/api/session/:id` | Agent 执行详情 |
 | `GET` | `/api/pricing?refresh=1` | 价格目录状态；`refresh=1` 强制刷新 |
-| `GET` | `/api/projects` | 数据库中的 project 列表 |
+| `GET` | `/api/projects` | 数据库中的 project 列表（已知 worktree 时含 `pathExists`） |
+
+### 源与缺失目录
+
+- 导入时 **要求** 目录存在；路径变更后的重新导入会成为新条目（绝对路径不同则 id 不同）。
+- 登记后的 `projectRoot` 若被删除/移动，`GET /api/sources` 仍会列出，并带 `pathExists: false`。
+- `GET /api/dashboard` 返回 **HTTP 200** 空看板与明确 `note`（不是 404/500）。请切换项目或 `DELETE /api/sources/:id`。
 
 ### Session 详情（摘要）
 
@@ -192,14 +226,29 @@ OPENCODE_DB_PATH=/path/to/opencode.db bun run start
 
 ---
 
+## 故障排查
+
+| 现象 | 排查 |
+| --- | --- |
+| `phrouros requires Bun ≥ 1.1` | 从 [bun.sh](https://bun.sh) 安装 Bun，再执行 `bunx phrouros` |
+| `npx phrouros` / 纯 Node 失败 | 预期行为 — 请用 `bunx` / `bun add -g`，不要用 `npx` |
+| 空看板 /「未找到主 session」 | 请先在该项目目录运行过 OpenCode；确认 `--db` / `OPENCODE_DB_PATH` |
+| 源显示 **路径不存在** | 目录已移动/删除；切换项目，或移除后按新路径重新导入 |
+| 数据库不对 | `OPENCODE_DB_PATH=/path/to/opencode.db phrouros` 或 `--db` |
+| 端口占用 | `phrouros --port 51235` |
+| 浏览器未打开 | 手动打开 `http://127.0.0.1:51234`；无头环境加 `--no-open` |
+| macOS / Windows 数据库路径 | 默认按 XDG 风格 `~/.local/share/opencode/`；若 OpenCode 路径不同请用 `--db` |
+
+---
+
 ## 隐私与安全
 
 - 对 OpenCode SQLite **只读**，从不写入该库。
 - UI **故意不展示** prompt、工具参数、工具结果。
-- 默认监听 `0.0.0.0`：请只在可信网络使用，或绑定本机：
+- 默认监听 `127.0.0.1`。若需局域网访问，请仅在可信网络使用：
 
   ```bash
-  bun run src/server.ts --host 127.0.0.1
+  phrouros --host 0.0.0.0
   ```
 
 - 导入项目会在 OpenCode storage 树下的 `sources.json` 中记录绝对路径。
@@ -210,6 +259,8 @@ OPENCODE_DB_PATH=/path/to/opencode.db bun run start
 
 ```text
 phrouros/
+├── bin/
+│   └── phrouros            # npm/bun bin → bun src/server.ts
 ├── public/                 # 零构建 SPA
 │   ├── index.html
 │   ├── styles.css
@@ -218,7 +269,7 @@ phrouros/
 │   ├── icons.js
 │   └── vendor/
 ├── src/
-│   ├── server.ts           # HTTP 入口（CLI: phrouros）
+│   ├── server.ts           # HTTP + CLI 参数
 │   ├── db.ts               # 看板查询 / 主 session 解析
 │   ├── session-detail.ts   # /api/session/:id
 │   ├── omo.ts              # boulder / 计划
@@ -227,6 +278,7 @@ phrouros/
 │   └── paths.ts            # XDG / 路径
 ├── package.json
 ├── tsconfig.json
+├── CHANGELOG.md
 ├── README.md
 ├── README.zh-CN.md
 └── LICENSE
@@ -237,10 +289,10 @@ phrouros/
 ## 开发
 
 ```bash
-# 无需 npm install（仅 Bun）
+# 应用本身无 npm 依赖，仅需 Bun
 bun run dev          # 热重载
 bun run start        # 常规启动
-bun run src/server.ts --help
+./bin/phrouros --help
 ```
 
 无打包步骤。改 `public/*` 后刷新浏览器；改 `src/*` 后重启服务（或使用 `bun run dev`）。
@@ -252,6 +304,23 @@ git checkout -b feat/your-change
 # ... 提交 ...
 git push -u origin feat/your-change
 # 向 main 开 Pull Request
+```
+
+发布检查（维护者）：
+
+```bash
+# 1. 版本号 + CHANGELOG
+# 2. 用 tarball 冒烟
+npm pack --dry-run          # 必须包含 bin/、src/、public/
+npm pack
+bun add -g ./phrouros-*.tgz
+phrouros --version
+phrouros --no-open
+# 3. 发布（需 npm login；公开包）
+npm publish --access public
+# 4. 验证
+bunx phrouros --version
+npm view phrouros version
 ```
 
 ---
@@ -279,6 +348,12 @@ git push -u origin feat/your-change
 请勿提交密钥、本机 OpenCode 数据库或 agent 工作区产物（`.omo/`、`.codegraph/` 已在 `.gitignore`）。
 
 Bug 与功能建议请使用 [GitHub Issues](https://github.com/disaeye/phrouros/issues)。
+
+---
+
+## 更新日志
+
+见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ---
 
