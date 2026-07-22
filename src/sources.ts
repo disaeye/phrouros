@@ -11,6 +11,25 @@ export type SourceEntry = {
   updatedAt: number
 }
 
+export type SourceView = SourceEntry & {
+  pathExists: boolean
+}
+
+export function sourcePathExists(projectRoot: string): boolean {
+  try {
+    return fs.existsSync(projectRoot) && fs.statSync(projectRoot).isDirectory()
+  } catch {
+    return false
+  }
+}
+
+export function toSourceView(entry: SourceEntry): SourceView {
+  return {
+    ...entry,
+    pathExists: sourcePathExists(entry.projectRoot),
+  }
+}
+
 type SourcesRegistry = {
   version: 1
   sources: Record<string, SourceEntry>
@@ -60,6 +79,12 @@ export function listSources(storageRoot: string): SourceEntry[] {
   })
 }
 
+export function pickDefaultSourceId(sources: readonly SourceView[]): string | null {
+  if (!sources.length) return null
+  const existing = sources.find((s) => s.pathExists)
+  return (existing ?? sources[0])?.id ?? null
+}
+
 export function getSourceById(storageRoot: string, sourceId: string): SourceEntry | null {
   return loadRegistry(storageRoot).sources[sourceId] ?? null
 }
@@ -69,7 +94,7 @@ export function addOrUpdateSource(
   input: { projectRoot: string; label?: string },
 ): SourceEntry {
   if (!fs.existsSync(input.projectRoot) || !fs.statSync(input.projectRoot).isDirectory()) {
-    throw new Error(`目录不存在或不是文件夹: ${input.projectRoot}`)
+    throw new Error(`Directory not found or not a folder: ${input.projectRoot}`)
   }
 
   const projectRoot = canonicalizePath(input.projectRoot)

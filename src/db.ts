@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite"
 import * as fs from "node:fs"
+import * as path from "node:path"
 import { canonicalizePath } from "./paths"
 import {
   ensurePricingCatalog,
@@ -86,6 +87,7 @@ export type DashboardSnapshot = {
   generatedAt: number
   dbPath: string
   projectRoot: string
+  pathExists: boolean
   source: { id: string; label: string } | null
   main: AgentView | null
   background: AgentView[]
@@ -106,6 +108,7 @@ export type DashboardSnapshot = {
     todos: OmoTodoItem[]
   }
   note: string | null
+  noteCode?: "path_missing" | "no_main_session" | null
 }
 
 export type DashboardEmpty = {
@@ -126,7 +129,7 @@ const IDLE_MS = 30 * 60 * 1000
 
 export function openReadonlyDb(dbPath: string): Database {
   if (!fs.existsSync(dbPath)) {
-    throw new Error(`找不到 OpenCode 数据库: ${dbPath}`)
+    throw new Error(`OpenCode database not found: ${dbPath}`)
   }
   // mode=ro + immutable query_only: never write; tolerate concurrent OpenCode WAL writers
   const db = new Database(dbPath, { readonly: true, create: false })
@@ -216,8 +219,8 @@ function toAgentView(row: SessionRow, now: number): AgentView {
   const tokens = tokensFromRow(row, estimate.usd)
   return {
     id: row.id,
-    title: row.title || "(无标题)",
-    agent: row.agent || "(未知 agent)",
+    title: row.title?.trim() || "untitled",
+    agent: row.agent?.trim() || "unknown",
     model,
     status: inferStatus(row, now),
     isMain: !row.parent_id,
@@ -258,22 +261,25 @@ export function findActiveMainSession(
   `).all(canonical, likePrefix)
 
   if (many.length === 0) {
-    // Fallback: match via project.worktree
-    const viaProject = db.query<SessionRow, [string]>(`
-      SELECT
-        s.id, s.project_id, s.parent_id, s.directory, s.title, s.agent, s.model,
-        s.cost, s.tokens_input, s.tokens_output, s.tokens_reasoning,
-        s.tokens_cache_read, s.tokens_cache_write,
-        s.time_created, s.time_updated, s.time_archived
-      FROM session s
-      JOIN project p ON p.id = s.project_id
-      WHERE s.parent_id IS NULL
-        AND s.time_archived IS NULL
-        AND p.worktree = ?
-      ORDER BY s.time_updated DESC
-      LIMIT 1
-    `).get(canonical)
-    return viaProject ?? null
+    try {
+      const viaProject = db.query<SessionRow, [string]>(`
+        SELECT
+          s.id, s.project_id, s.parent_id, s.directory, s.title, s.agent, s.model,
+          s.cost, s.tokens_input, s.tokens_output, s.tokens_reasoning,
+          s.tokens_cache_read, s.tokens_cache_write,
+          s.time_created, s.time_updated, s.time_archived
+        FROM session s
+        JOIN project p ON p.id = s.project_id
+        WHERE s.parent_id IS NULL
+          AND s.time_archived IS NULL
+          AND p.worktree = ?
+        ORDER BY s.time_updated DESC
+        LIMIT 1
+      `).get(canonical)
+      return viaProject ?? null
+    } catch {
+      return null
+    }
   }
 
   // Prefer exact directory equality, then already ordered by time_updated DESC
@@ -349,7 +355,29 @@ function listTodos(db: Database, sessionId: string): OmoTodoItem[] {
 
 function emptyOmoPayload(projectRoot: string) {
   return {
-    boulder: readOmoBoulder(projectRoot),
+    boulder: projectRoot ? readOmoBoulder(projectRoot) : {
+      present: false as const,
+      schemaVersion: null,
+      status: null,
+      agent: null,
+      planName: null,
+      activePlan: null,
+      activeWorkId: null,
+      startedAt: null,
+      updatedAt: null,
+      sessionIds: [] as string[],
+      plan: {
+        missing: true,
+        total: 0,
+        completed: 0,
+        isComplete: false,
+        percent: 0,
+        steps: [],
+        stepsTruncated: false,
+      },
+      taskSessions: [],
+      taskStatusCounts: {},
+    },
     config: readOmoConfig(),
     todos: [] as OmoTodoItem[],
   }
@@ -359,39 +387,70 @@ export async function buildDashboard(opts: {
   dbPath: string
   projectRoot: string
   source?: { id: string; label: string } | null
+  pathExists?: boolean
 }): Promise<DashboardSnapshot> {
   await ensurePricingCatalog()
   const pricing = getPricingMeta()
   const now = Date.now()
-  const projectRoot = canonicalizePath(opts.projectRoot)
+  const pathExists =
+    typeof opts.pathExists === "boolean"
+      ? opts.pathExists
+      : (() => {
+          try {
+            return fs.existsSync(opts.projectRoot) && fs.statSync(opts.projectRoot).isDirectory()
+          } catch {
+            return false
+          }
+        })()
+  const projectRoot = pathExists ? canonicalizePath(opts.projectRoot) : path.resolve(opts.projectRoot)
+  const emptyBoard = (
+    noteCode: "path_missing" | "no_main_session",
+    note: string,
+    omoRoot: string,
+  ): DashboardSnapshot => ({
+    ok: true,
+    generatedAt: now,
+    dbPath: opts.dbPath,
+    projectRoot,
+    pathExists,
+    source: opts.source ?? null,
+    main: null,
+    background: [],
+    totals: {
+      main: emptyTokens(),
+      background: emptyTokens(),
+      all: emptyTokens(),
+      backgroundCount: 0,
+      runningBackgroundCount: 0,
+      estimatedCost: 0,
+      unmatchedSessions: 0,
+    },
+    modelBreakdown: [],
+    pricing,
+    omo: emptyOmoPayload(omoRoot),
+    note,
+    noteCode,
+  })
+
+  if (!pathExists) {
+    return emptyBoard(
+      "path_missing",
+      `Project directory missing: ${projectRoot}. Switch project or remove this source and re-import.`,
+      "",
+    )
+  }
+
   const omoBase = emptyOmoPayload(projectRoot)
   const db = openReadonlyDb(opts.dbPath)
   try {
     const mainRow = resolveMainSession(db, projectRoot, omoBase.boulder)
 
     if (!mainRow) {
-      return {
-        ok: true,
-        generatedAt: now,
-        dbPath: opts.dbPath,
+      return emptyBoard(
+        "no_main_session",
+        "No unarchived main session found under this directory. Confirm OpenCode was started there.",
         projectRoot,
-        source: opts.source ?? null,
-        main: null,
-        background: [],
-        totals: {
-          main: emptyTokens(),
-          background: emptyTokens(),
-          all: emptyTokens(),
-          backgroundCount: 0,
-          runningBackgroundCount: 0,
-          estimatedCost: 0,
-          unmatchedSessions: 0,
-        },
-        modelBreakdown: [],
-        pricing,
-        omo: omoBase,
-        note: "该目录下未找到未归档的主 session。请确认曾在该目录启动过 OpenCode。",
-      }
+      )
     }
 
     const children = listChildSessions(db, mainRow.id)
@@ -411,7 +470,7 @@ export async function buildDashboard(opts: {
 
     const modelGroupKey = (model: ParsedModel | null | undefined): string => {
       const id = model?.id?.trim()
-      if (!id) return "(未知模型)"
+      if (!id) return "unknown"
       return id.toLowerCase()
     }
 
@@ -473,6 +532,7 @@ export async function buildDashboard(opts: {
       generatedAt: now,
       dbPath: opts.dbPath,
       projectRoot,
+      pathExists,
       source: opts.source ?? null,
       main,
       background,
@@ -492,19 +552,32 @@ export async function buildDashboard(opts: {
         todos,
       },
       note: null,
+      noteCode: null,
     }
   } finally {
     db.close()
   }
 }
 
-export function listProjectsFromDb(dbPath: string): Array<{
+export type DiscoveredProject = {
   id: string
   worktree: string
   name: string | null
   sessionCount: number
   lastActive: number | null
-}> {
+  pathExists: boolean
+  label: string
+}
+
+function projectLabel(name: string | null, worktree: string): string {
+  const fromName = name?.trim()
+  if (fromName) return fromName
+  const base = worktree.replace(/\/+$/, "").split("/").pop()
+  return base || worktree
+}
+
+export function listProjectsFromDb(dbPath: string): DiscoveredProject[] {
+  if (!fs.existsSync(dbPath)) return []
   const db = openReadonlyDb(dbPath)
   try {
     type Row = {
@@ -527,13 +600,24 @@ export function listProjectsFromDb(dbPath: string): Array<{
       ORDER BY last_active IS NULL, last_active DESC
       LIMIT 100
     `).all()
-    return rows.map((r) => ({
-      id: r.id,
-      worktree: r.worktree,
-      name: r.name,
-      sessionCount: r.session_count,
-      lastActive: r.last_active,
-    }))
+    return rows.map((r) => {
+      const worktree = r.worktree || ""
+      let pathExists = false
+      try {
+        pathExists = Boolean(worktree && fs.existsSync(worktree) && fs.statSync(worktree).isDirectory())
+      } catch {
+        pathExists = false
+      }
+      return {
+        id: r.id,
+        worktree,
+        name: r.name,
+        sessionCount: r.session_count,
+        lastActive: r.last_active,
+        pathExists,
+        label: projectLabel(r.name, worktree),
+      }
+    })
   } finally {
     db.close()
   }
